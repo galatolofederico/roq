@@ -1,83 +1,80 @@
 import os
 import pickle
-import paho.mqtt.client as mqtt
+import asyncio
 
-_client = None
-_config = None
+_config = dict(
+    bindings=dict()
+)
 
-def check_init(fn):
-    def wrapper(*args, **kwargs):
-        global _client
-        if _client is None:
-            raise Exception("roq.init() must be called before using any other roq functions")
-        return fn(*args, **kwargs)
-    return wrapper
-
-def on_connect(client, userdata, flags, reason_code, properties):
-    global _config
-    if reason_code != 0 and _config["fail_on_connect"]:
-        raise Exception(f"Connection failed with reason code {reason_code}")
-
-def on_message(client, userdata, message):
-    print(f"Received message '{message.payload.decode()}' on topic '{message.topic}'")
-
-
-def init(
-        *,
-        host,
-        port,
-        keepalive=60,
-        username=None,
-        password=None,
-        transport="tcp",
-        tls=False,
-        client=None,
-        fail_on_connect=True
-    ):
-        global _client
+class ROQClient:
+    def __init__(self, client):
         global _config
+        self.return_queues = dict()
+        self.args_topics = list()
+
+        self.client = client
+
+    async def call(self, topic, *args, **kwargs):
+        args_topic = os.path.join(topic, "args")
+        return_topic = os.path.join(topic, "return")
+
+        if return_topic not in self.return_queues:
+            self.return_queues[return_topic] = asyncio.Queue()
+        
+        payload = pickle.dumps(args)
+        await self.client.publish(args_topic, payload=payload)
+        
+        return await self.return_queues[return_topic].get()
     
-        if client is not None:
-            if username is not None or password is not None or transport is not None or tls is not None:
-                raise Exception("If you pass a paho.mqtt.client.Client, you cannot pass any configuration argument")
-            _client = client
-        else:
-            _client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, transport=transport)
-            if tls:
-                _client.tls_set()
-            if username is not None and password is not None:
-                _client.username_pw_set(username, password)
-            
-        _client.on_connect = on_connect
-        _client.on_message = on_message
-        _client.connect(host, port, keepalive)
+    async def handle(self, message):
+        topic = message.topic
+        payload = message.payload
 
-        _config = dict(
-            fail_on_connect=fail_on_connect,
-            bindings=dict()
-        )
+        if topic in self.args_topics:
+            fn = _config["bindings"][topic]["fn"]
+            return_topic = _config["bindings"][topic]["return_topic"]
 
-@check_init
-def serve():
-    global _client
-    _client.loop_forever()
+            result = fn(*pickle.loads(payload))
 
-@check_init
+            payload = pickle.dumps(result)
+            await self.client.publish(return_topic, payload=payload)
+            return True
+        
+        elif topic in self.return_queues:
+            self.return_queues[topic].put(pickle.loads(payload))
+            return True
+
+        return False
+    
+    async def dispatch(self):
+        async for message in self.client.messages:
+            await self.handle(message)
+
+async def bind(client):
+    global _config
+
+    for topic in _config["bindings"]:
+        await client.subscribe(topic)
+
+    return ROQClient(client)
+
 def procedure(topic):
     global _config
 
     if topic in _config["bindings"]:
         raise Exception(f"Topic {topic} is already bound to a procedure")
 
-    receive_topic = os.path.join(topic, "args")
-    return_topic = os.path.join(topic, "return")
+    args_topic = os.path.join(topic, "args")
+    return_topic=os.path.join(topic, "return")
     def decorator(fn):
         def wrapper(*args, **kwargs):
-            return_value = fn(*args, **kwargs)
-            payload = pickle.dumps(return_value)
-            _client.publish(return_topic, payload)
+            return fn(*args, **kwargs)
         
-        _client.subscribe(receive_topic)
-        _config["bindings"][topic] = wrapper
+        _config["bindings"][args_topic] = dict(
+            fn=fn,
+            return_topic=return_topic,
+        )
 
+        return wrapper
+    
     return decorator
