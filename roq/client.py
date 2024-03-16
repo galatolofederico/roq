@@ -6,9 +6,9 @@ import pickle
 logger = logging.getLogger(__name__)
 
 class ROQClient:
-    def __init__(self, client):
-        global _config
+    def __init__(self, client, args_bindings):
         self.return_queues = dict()
+        self.args_bindings = args_bindings
 
         self.client = client
 
@@ -23,11 +23,14 @@ class ROQClient:
             import time
             time.sleep(0.1)
         
+        self.client._queue.bind(return_topic, self.return_queues[return_topic])
+
         payload = pickle.dumps(args)
         logger.debug(f"ROQClient.call on '{topic}': Publishing on '{args_topic}'")
         await self.client.publish(args_topic, payload=payload)
         
-        return self.return_queues[return_topic].get()
+        payload = await self.return_queues[return_topic].get()
+        return pickle.loads(payload.payload)
     
     async def handle(self, message):
         global _config
@@ -37,10 +40,10 @@ class ROQClient:
 
         logger.debug(f"ROQClient.handle: Received message on '{topic}'")
 
-        if topic in _config["bindings"]:
+        if topic in self.args_bindings:
             logger.debug(f"ROQClient.handle: '{topic}' is a procedure")
-            fn = _config["bindings"][topic]["fn"]
-            return_topic = _config["bindings"][topic]["return_topic"]
+            fn = self.args_bindings[topic]["fn"]
+            return_topic = self.args_bindings[topic]["return_topic"]
 
             result = fn(*pickle.loads(payload))
 
@@ -49,10 +52,6 @@ class ROQClient:
             await self.client.publish(return_topic, payload=payload)
             return True
         
-        elif topic in self.return_queues:
-            self.return_queues[topic].put(pickle.loads(payload))
-            return True
-
         return False
     
     async def dispatch(self):
