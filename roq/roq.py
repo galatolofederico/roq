@@ -1,6 +1,9 @@
+import os
+import pickle
 import paho.mqtt.client as mqtt
 
 _client = None
+_config = None
 
 def check_init(fn):
     def wrapper(*args, **kwargs):
@@ -11,7 +14,9 @@ def check_init(fn):
     return wrapper
 
 def on_connect(client, userdata, flags, reason_code, properties):
-    print(f"Connected with result code {reason_code}")
+    global _config
+    if reason_code != 0 and _config["fail_on_connect"]:
+        raise Exception(f"Connection failed with reason code {reason_code}")
 
 def on_message(client, userdata, message):
     print(f"Received message '{message.payload.decode()}' on topic '{message.topic}'")
@@ -27,8 +32,10 @@ def init(
         transport="tcp",
         tls=False,
         client=None,
+        fail_on_connect=True
     ):
         global _client
+        global _config
     
         if client is not None:
             if username is not None or password is not None or transport is not None or tls is not None:
@@ -45,6 +52,10 @@ def init(
         _client.on_message = on_message
         _client.connect(host, port, keepalive)
 
+        _config = dict(
+            fail_on_connect=fail_on_connect,
+            bindings=dict()
+        )
 
 @check_init
 def serve():
@@ -53,7 +64,20 @@ def serve():
 
 @check_init
 def procedure(topic):
-    def wrapper(*args, **kwargs):
-        pass
+    global _config
 
-    return wrapper
+    if topic in _config["bindings"]:
+        raise Exception(f"Topic {topic} is already bound to a procedure")
+
+    receive_topic = os.path.join(topic, "args")
+    return_topic = os.path.join(topic, "return")
+    def decorator(fn):
+        def wrapper(*args, **kwargs):
+            return_value = fn(*args, **kwargs)
+            payload = pickle.dumps(return_value)
+            _client.publish(return_topic, payload)
+        
+        _client.subscribe(receive_topic)
+        _config["bindings"][topic] = wrapper
+
+    return decorator
