@@ -14,12 +14,9 @@ _config = dict(
 
 async def bind(client):
     global _config
-
-    for topic in _config["bindings"]:
-        logger.debug(f"bind: Subscribing to '{topic}'")
-        await client.subscribe(topic)
-
-    return ROQClient(client, args_bindings=_config["bindings"].copy())
+    roq_client = ROQClient(client, args_bindings=_config["bindings"].copy())
+    await roq_client.init()
+    return roq_client
 
 def procedure(topic):
     global _config
