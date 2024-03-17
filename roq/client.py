@@ -3,21 +3,37 @@ import os
 import logging
 import pickle
 import random
+from aiomqtt import Client as MQTTClient
+
+from roq import _config
 
 logger = logging.getLogger(__name__)
 
-class ROQClient:
-    def __init__(self, client, args_bindings):
+class Client:
+    def __init__(self, *args, **kwargs):
         self.return_queues = dict()
-        self.args_bindings = args_bindings
 
-        self.client = client
+        if len(args) == 1 and isinstance(args[0], MQTTClient):
+            self.client = args[0]
+        else:
+            self.client = MQTTClient(*args, **kwargs)
 
-    async def init(self):
-        for topic in self.args_bindings:
+    async def __aenter__(self):
+        await self.client.__aenter__()
+        await self.init(_config["bindings"])
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.client.__aexit__(exc_type, exc, tb)
+
+    def __aiter__(self):
+        return self.inner.__aiter__()
+
+    async def init(self, bindings):
+        for topic in bindings:
             async def handle(payload):
-                fn = self.args_bindings[topic]["fn"]
-                return_topic = self.args_bindings[topic]["return_topic"]
+                fn = bindings[topic]["fn"]
+                return_topic = bindings[topic]["return_topic"]
                 
                 payload = pickle.loads(payload.payload)
                 args = payload["args"]
@@ -62,3 +78,6 @@ class ROQClient:
         logger.debug(f"ROQClient.call on '{topic}': Unbound return queue from '{return_topic}'")
 
         return result
+    
+    def __getattr__(self, name):
+        return getattr(self.client, name)

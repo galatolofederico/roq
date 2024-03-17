@@ -4,19 +4,9 @@ import pickle
 import asyncio
 import logging
 
-from roq.client import ROQClient
+from roq import _config
 
 logger = logging.getLogger(__name__)
-
-_config = dict(
-    bindings=dict()
-)
-
-async def bind(client):
-    global _config
-    roq_client = ROQClient(client, args_bindings=_config["bindings"].copy())
-    await roq_client.init()
-    return roq_client
 
 def procedure(topic):
     global _config
