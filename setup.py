@@ -15,6 +15,8 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     packages=["roq"],
     install_requires=[
+        "aiomqtt==2.0.1",
+        "paho-mqtt==1.6.1"
     ],
     classifiers=[
         "Programming Language :: Python :: 3.11",
