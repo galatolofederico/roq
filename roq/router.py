@@ -57,8 +57,8 @@ class ROQRouterQueue(asyncio.Queue):
 
     def _put(self, item):
         logger.debug(f"ROQRouterQueue._put: Received message on '{item.topic}'")
-        if not self.handle_roq_message(item):
-            super()._put(item)
+        if self.handle_roq_message(item): return
+        super()._put(item)
 
     def _get(self):
         return super()._get()
