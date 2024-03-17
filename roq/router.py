@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import pickle
 
 logger = logging.getLogger(__name__)
 
@@ -9,13 +10,22 @@ class ROQRouterQueue(asyncio.Queue):
         self.queue_bindings = dict()
         self.function_bindings = dict()
 
-    def bind_queue(self, topic, queue):
+    def bind_queue(self, *, topic, queue, nonce):
         assert isinstance(queue, asyncio.Queue)
         assert isinstance(topic, str)
         
-        self.queue_bindings[topic] = queue
+        self.queue_bindings[topic] = dict(
+            queue=queue,
+            nonce=nonce
+        )
 
-    def bind_function(self, topic, fn):
+    def unbind_queue(self, *, topic):
+        assert isinstance(topic, str)
+        
+        if topic in self.queue_bindings:
+            del self.queue_bindings[topic]
+
+    def bind_function(self, *, topic, fn):
         assert callable(fn)
         assert isinstance(topic, str)
         
@@ -26,7 +36,17 @@ class ROQRouterQueue(asyncio.Queue):
         logger.debug(f"ROQRouterQueue._put: Received message on '{topic}'")
         if topic in self.queue_bindings:
             logger.debug(f"ROQRouterQueue._put: '{topic}' is bound to a queue")
-            self.queue_bindings[topic].put_nowait(item)
+            payload = pickle.loads(item.payload)
+
+            result = payload["result"]
+            nonce = payload["nonce"]
+
+            if nonce != self.queue_bindings[topic]["nonce"]:
+                print(nonce, self.queue_bindings[topic]["nonce"])
+                logger.debug(f"ROQRouterQueue._put: Received message on '{topic}' with invalid nonce, discarding")
+            else:
+                self.queue_bindings[topic]["queue"].put_nowait(result)
+            
         elif topic in self.function_bindings:
             logger.debug(f"ROQRouterQueue._put: '{topic}' is bound to a function")
             fn = self.function_bindings[topic]
