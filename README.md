@@ -3,7 +3,7 @@
 Pythonic RPC over MQTT for [aiomqtt](https://github.com/sbtinstruments/aiomqtt)
 
 - 💡 Clean interface, RPC with just a decorator
-- 💪 Robust multi-client implementation using
+- 💪 Robust multi-client implementation
 - 🤝 Seamlessly integrates with [aiomqtt](https://github.com/sbtinstruments/aiomqtt)
 
 
@@ -25,7 +25,7 @@ def sum(a, b):
 import roq
 
 async with client:
-    ret = await client["/rpc/sum"](1, 2)
+    ret = await client["/your/topic/name"](1, 2)
 ```
 
 ## installation
@@ -38,7 +38,7 @@ pip install roq
 
 To create a `roq`-enabled `aiomqtt.Client` you can:
 
-1) Replace `aiomqtt.Client` with `roq.Client` in your code:
+1) Replace `aiomqtt.Client` with `roq.Client` in your code (full documentation [here](https://sbtinstruments.github.io/aiomqtt/developer-interface.html#client))
 
 ```python
 import roq
@@ -63,7 +63,7 @@ import roq
 import aiomqtt
 
 client = aiomqtt.Client(
-    ...  # Setup here
+    ...  # Your usual MQTT client setup
     queue_type=roq.ROQRouterQueue
 )
 
@@ -123,9 +123,11 @@ if __name__ == "__main__":
 You can use a custom queue extending `roq.ROQRouterQueue`
 
 ```python
-class YourQueue(row.ROQRouterQueue):
+import roq
+
+class YourQueue(roq.ROQRouterQueue)
     def _put(self, item):
-        if self.handle_roq_message(item): return   # you must add this line
+        if self.handle_roq_message(item): return   # handle roq messages
 
         #your item logic here
         super()._put(item)
