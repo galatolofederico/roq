@@ -86,3 +86,8 @@ class Client:
     
     def __getattr__(self, name):
         return getattr(self.client, name)
+
+    def __getitem__(self, topic):
+        def wrapper(*args, **kwargs):
+            return self.call(topic, *args, **kwargs)
+        return wrapper
