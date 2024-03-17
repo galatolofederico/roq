@@ -5,6 +5,7 @@ import pickle
 import random
 from aiomqtt import Client as MQTTClient
 
+from roq.router import ROQRouterQueue
 from roq import _config
 
 logger = logging.getLogger(__name__)
@@ -16,7 +17,11 @@ class Client:
         if len(args) == 1 and isinstance(args[0], MQTTClient):
             self.client = args[0]
         else:
+            kwargs["queue_type"] = ROQRouterQueue
             self.client = MQTTClient(*args, **kwargs)
+
+        if not isinstance(self.client._queue, ROQRouterQueue):
+            raise Exception("Client's queue must be of type ROQRouterQueue. Use roq.Client to create the client or use 'queue_type=roq.ROQRouterQueue' when creating the client using aiomqtt.Client")
 
     async def __aenter__(self):
         await self.client.__aenter__()
