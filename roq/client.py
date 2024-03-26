@@ -59,8 +59,11 @@ class Client:
             self.client._queue.bind_function(topic=topic, fn=handle)
 
     async def call(self, topic, *args, **kwargs):
-        args_topic = os.path.join(topic, "args")
-        return_topic = os.path.join(topic, "return")
+        if topic.endswith("/"):
+            topic = topic[:-1]
+        
+        args_topic = f"{topic}/args"
+        return_topic = f"{topic}/return"
         nonce = random.randint(0, 2**32)
         queue = asyncio.Queue()
         

@@ -13,9 +13,12 @@ def procedure(topic):
 
     if topic in _config["bindings"]:
         raise Exception(f"Topic {topic} is already bound to a procedure")
-
-    args_topic = os.path.join(topic, "args")
-    return_topic=os.path.join(topic, "return")
+    
+    if topic.endswith("/"):
+        topic = topic[:-1]
+    
+    args_topic = f"{topic}/args"
+    return_topic = f"{topic}/return"
     def decorator(fn):
         def wrapper(*args, **kwargs):
             return fn(*args, **kwargs)
